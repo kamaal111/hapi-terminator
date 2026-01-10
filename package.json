@@ -1,0 +1,52 @@
+{
+  "name": "hapi-terminator",
+  "main": "index.js",
+  "typings": "index.d.ts",
+  "type": "module",
+  "version": "0.0.1",
+  "license": "MIT",
+  "author": {
+    "name": "Kamaal Farah"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@hapi/hapi": "^21.4.4",
+    "@kamaalio/prettier-config": "^0.1.2",
+    "@types/bun": "latest",
+    "eslint": "^9.39.2",
+    "globals": "^17.0.0",
+    "husky": "^9.1.7",
+    "jiti": "^2.6.1",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.7.4",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.52.0"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1"
+  },
+  "prettier": "@kamaalio/prettier-config",
+  "lint-staged": {
+    "**/*.{js,ts,tsx}": [
+      "eslint --fix"
+    ],
+    "**/*": "prettier --write --ignore-unknown"
+  },
+  "scripts": {
+    "compile": "tsc",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "prepare": "bunx husky",
+    "prepack": "rm -rf dist && bun run compile",
+    "quality": "bun run format:check && bun run lint && bun run typecheck",
+    "release": "npm publish ./dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ]
+}
