@@ -15,3 +15,5 @@ jobs:
       - run: bun install
       - run: npm version ${{ github.ref_name }} || true
       - run: npm publish --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
