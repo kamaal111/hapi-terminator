@@ -40,7 +40,6 @@
     "prepare": "bunx husky",
     "prepack": "rm -rf dist && bun run compile",
     "quality": "bun run format:check && bun run lint && bun run typecheck",
-    "release": "npm publish ./dist",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
