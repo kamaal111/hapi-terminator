@@ -35,8 +35,8 @@ import terminatorPlugin, { type TerminatorOptions } from 'hapi-terminator';
 const server = Hapi.server({ port: 3000, host: '127.0.0.1' });
 
 const requestTerminateOptions: TerminatorOptions = {
-  terminateOnUnregisteredMaxBytes: 500 * 1024, // 500KB for unregistered routes
-  terminateOnRegisteredMaxBytes: 500 * 1024, // 500KB for registered routes
+  unregisteredLimit: 500 * 1024, // 500KB for unregistered routes
+  registeredLimit: 500 * 1024, // 500KB for registered routes
 };
 
 await server.register({
@@ -60,14 +60,14 @@ You can provide custom functions to determine whether a request should be termin
 
 ```typescript
 const requestTerminateOptions: TerminatorOptions = {
-  terminateOnRegisteredMaxBytes: (request, size) => {
+  registeredLimit: (request, size) => {
     // Custom logic based on request properties
     if (request.path === '/upload') {
       return size > 10 * 1024 * 1024; // 10MB for upload route
     }
     return size > 500 * 1024; // 500KB for other routes
   },
-  terminateOnUnregisteredMaxBytes: (request, size) => {
+  unregisteredLimit: (request, size) => {
     return size > 100 * 1024; // 100KB for unregistered routes
   },
 };
@@ -77,10 +77,10 @@ const requestTerminateOptions: TerminatorOptions = {
 
 ### TerminatorOptions
 
-| Option                            | Type                                                      | Description                                                                                                                                   |
-| --------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `terminateOnRegisteredMaxBytes`   | `number \| ((request: Request, size: number) => boolean)` | Maximum payload size for registered routes. Can be a number in bytes or a function that returns `true` if the request should be terminated.   |
-| `terminateOnUnregisteredMaxBytes` | `number \| ((request: Request, size: number) => boolean)` | Maximum payload size for unregistered routes. Can be a number in bytes or a function that returns `true` if the request should be terminated. |
+| Option              | Type                                                      | Description                                                                                                                                   |
+| ------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `registeredLimit`   | `number \| ((request: Request, size: number) => boolean)` | Maximum payload size for registered routes. Can be a number in bytes or a function that returns `true` if the request should be terminated.   |
+| `unregisteredLimit` | `number \| ((request: Request, size: number) => boolean)` | Maximum payload size for unregistered routes. Can be a number in bytes or a function that returns `true` if the request should be terminated. |
 
 ### Behavior
 

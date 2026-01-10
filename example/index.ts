@@ -9,8 +9,8 @@ process.on('unhandledRejection', err => {
 const server = Hapi.server({ port: 3000, host: '127.0.0.1' });
 
 const requestTerminateOptions: TerminatorOptions = {
-  terminateOnUnregisteredMaxBytes: 500 * 1024, // 500KB - destroy socket for larger payloads on unregistered routes
-  terminateOnRegisteredMaxBytes: 500 * 1024, // 500KB - destroy socket for larger payloads on registered routes
+  unregisteredLimit: 500 * 1024, // 500KB - destroy socket for larger payloads on unregistered routes
+  registeredLimit: 500 * 1024, // 500KB - destroy socket for larger payloads on registered routes
 };
 
 await server.register({
