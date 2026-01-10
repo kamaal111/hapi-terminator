@@ -82,3 +82,5 @@ async function register(server: Server, options: TerminatorOptions) {
     return unregisteredRouteHandler(contentLength);
   });
 }
+
+export default { plugin };
