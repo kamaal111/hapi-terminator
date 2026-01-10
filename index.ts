@@ -3,10 +3,16 @@ import Boom from '@hapi/boom';
 
 import pkg from './package.json';
 
-export type TerminatorOptions = {
-  registeredLimit?: number | ((request: Request, size: number) => boolean);
-  unregisteredLimit?: number | ((request: Request, size: number) => boolean);
-};
+type LimitOption = number | ((request: Request, size: number) => boolean);
+
+type LimitOptionName = (typeof LIMIT_OPTION_NAMES)[keyof typeof LIMIT_OPTION_NAMES];
+
+export type TerminatorOptions = { [Name in LimitOptionName]?: LimitOption };
+
+const LIMIT_OPTION_NAMES = {
+  REGISTERED: 'registeredLimit',
+  UNREGISTERED: 'unregisteredLimit',
+} as const;
 
 export const plugin = { pkg, register };
 
@@ -16,8 +22,7 @@ async function register(server: Server, options: TerminatorOptions) {
 
 function onRequest(options: TerminatorOptions) {
   return (request: Request, h: ResponseToolkit) => {
-    const unregisteredRouteHandler = handleUnregisteredRoute(request, h, options);
-    const registeredRouteHandler = handleRegisteredRoute(request, h, options);
+    const handler = validateRoute(request, h, options);
 
     const rawContentLength = request.headers['content-length'];
     if (!rawContentLength) {
@@ -31,53 +36,32 @@ function onRequest(options: TerminatorOptions) {
 
     const matchedRoute = request.server.match(request.method, request.path);
     if (matchedRoute != null) {
-      return registeredRouteHandler(contentLength);
+      return handler(contentLength, LIMIT_OPTION_NAMES.REGISTERED, option => {
+        throw Boom.entityTooLarge(
+          typeof option === 'number' ? `Payload content length greater than maximum allowed: ${option}` : undefined,
+        );
+      });
     }
 
-    return unregisteredRouteHandler(contentLength);
-  };
-}
-
-function handleUnregisteredRoute(request: Request, h: ResponseToolkit, options: TerminatorOptions) {
-  return (contentLength: number) => {
-    if (
-      options.unregisteredLimit == null ||
-      (typeof options.unregisteredLimit === 'number' && options.unregisteredLimit < 0)
-    ) {
-      return h.continue;
-    }
-
-    if (
-      (typeof options.unregisteredLimit === 'number' && contentLength > options.unregisteredLimit) ||
-      (typeof options.unregisteredLimit === 'function' && options.unregisteredLimit(request, contentLength))
-    ) {
-      request.raw.req.socket?.destroy();
+    return handler(contentLength, LIMIT_OPTION_NAMES.UNREGISTERED, () => {
       throw Boom.notFound();
-    }
-
-    return h.continue;
+    });
   };
 }
 
-function handleRegisteredRoute(request: Request, h: ResponseToolkit, options: TerminatorOptions) {
-  return (contentLength: number) => {
-    if (
-      options.registeredLimit == null ||
-      (typeof options.registeredLimit === 'number' && options.registeredLimit < 0)
-    ) {
+function validateRoute(request: Request, h: ResponseToolkit, options: TerminatorOptions) {
+  return (contentLength: number, optionName: LimitOptionName, throwError: (option: LimitOption) => never) => {
+    const option = options[optionName];
+    if (option == null || (typeof option === 'number' && option < 0)) {
       return h.continue;
     }
 
     if (
-      (typeof options.registeredLimit === 'number' && contentLength > options.registeredLimit) ||
-      (typeof options.registeredLimit === 'function' && options.registeredLimit(request, contentLength))
+      (typeof option === 'number' && contentLength > option) ||
+      (typeof option === 'function' && option(request, contentLength))
     ) {
       request.raw.req.socket?.destroy();
-      throw Boom.entityTooLarge(
-        typeof options.registeredLimit === 'number'
-          ? `Payload content length greater than maximum allowed: ${options.registeredLimit}`
-          : undefined,
-      );
+      throwError(option);
     }
 
     return h.continue;
