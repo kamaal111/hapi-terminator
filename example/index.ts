@@ -1,5 +1,7 @@
-import Hapi from '@hapi/hapi';
-import terminatorPlugin, { type TerminatorOptions } from 'hapi-terminator';
+import Hapi, { type PluginSpecificConfiguration } from '@hapi/hapi';
+import terminatorPlugin, { type TerminatorOptions, type TerminatorRouteOptions } from 'hapi-terminator';
+
+type RoutePluginOptions = PluginSpecificConfiguration & TerminatorRouteOptions;
 
 process.on('unhandledRejection', err => {
   console.log(err);
@@ -19,9 +21,16 @@ await server.register({
 });
 
 server.route({
-  method: ['GET', 'POST'],
+  method: ['GET'],
   path: '/',
   handler: () => 'Hello World!',
+});
+
+server.route({
+  method: ['POST'],
+  path: '/',
+  handler: () => 'Hello World!',
+  options: { plugins: { 'hapi-terminator': { limit: 1000 * 1024 } } as RoutePluginOptions },
 });
 
 server.route({
