@@ -23,7 +23,8 @@
     "typescript-eslint": "^8.52.0"
   },
   "dependencies": {
-    "@hapi/boom": "^10.0.1"
+    "@hapi/boom": "^10.0.1",
+    "zod": "^4.3.5"
   },
   "prettier": "@kamaalio/prettier-config",
   "lint-staged": {
