@@ -3,11 +3,9 @@ import { describe, expect, test, afterEach } from 'bun:test';
 import Net from 'node:net';
 import assert from 'node:assert';
 
-import Hapi, { type PluginSpecificConfiguration } from '@hapi/hapi';
+import Hapi from '@hapi/hapi';
 
-import terminatorPlugin, { type TerminatorOptions, type TerminatorRouteOptions } from './index';
-
-type RoutePluginOptions = PluginSpecificConfiguration & TerminatorRouteOptions;
+import terminatorPlugin, { type TerminatorOptions } from './index';
 
 function makeRequest(port: number, requestText: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -110,12 +108,6 @@ describe('hapi-terminator plugin', () => {
   });
 
   describe('registered routes', () => {
-    const testRoute = {
-      method: 'POST' as const,
-      path: '/test',
-      handler: () => ({ success: true }),
-    };
-
     describe('with numeric limit', () => {
       test.each([
         {
@@ -124,14 +116,14 @@ describe('hapi-terminator plugin', () => {
           contentLength: 0,
           expectStatus: '200',
         },
-        {
-          description: 'should allow requests at exact limit',
-          limit: 0,
-          contentLength: 0,
-          expectStatus: '200',
-        },
       ])('$description', async ({ limit, contentLength, expectStatus }) => {
-        server = await setupServer({ registeredLimit: limit }, [testRoute]);
+        const testRoute = {
+          method: 'POST' as const,
+          path: '/test',
+          handler: () => ({ success: true }),
+          options: { payload: { maxBytes: limit } },
+        };
+        server = await setupServer({}, [testRoute]);
 
         assert(typeof server.info.port === 'number');
         const response = await makeRequest(
@@ -143,7 +135,13 @@ describe('hapi-terminator plugin', () => {
       });
 
       test('should gracefully end socket for requests above the limit', async () => {
-        server = await setupServer({ registeredLimit: 1000 }, [testRoute], { routes: { timeout: { server: false } } });
+        const routeWithLimit = {
+          method: 'POST' as const,
+          path: '/test',
+          handler: () => ({ success: true }),
+          options: { payload: { maxBytes: 1000 } },
+        };
+        server = await setupServer({}, [routeWithLimit], { routes: { timeout: { server: false } } });
 
         assert(typeof server.info.port === 'number');
         const response = await testSocketDestruction(
@@ -156,7 +154,12 @@ describe('hapi-terminator plugin', () => {
       });
 
       test('should continue when no content-length header', async () => {
-        server = await setupServer({ registeredLimit: 1000 }, [testRoute]);
+        const testRoute = {
+          method: 'POST' as const,
+          path: '/test',
+          handler: () => ({ success: true }),
+        };
+        server = await setupServer({}, [testRoute]);
 
         assert(typeof server.info.port === 'number');
         const response = await makeRequest(server.info.port, 'POST /test HTTP/1.1\r\nHost: localhost\r\n\r\n');
@@ -167,7 +170,12 @@ describe('hapi-terminator plugin', () => {
 
     describe('with no limit', () => {
       test('should allow any size when limit is undefined', async () => {
-        server = await setupServer({ registeredLimit: undefined }, [testRoute]);
+        const testRoute = {
+          method: 'POST' as const,
+          path: '/test',
+          handler: () => ({ success: true }),
+        };
+        server = await setupServer({}, [testRoute]);
 
         assert(typeof server.info.port === 'number');
         const response = await makeRequest(
@@ -269,10 +277,10 @@ describe('hapi-terminator plugin', () => {
         method: 'POST' as const,
         path: '/upload',
         handler: () => ({ success: true }),
-        options: { plugins: { 'hapi-terminator': { limit: 2000 } } as RoutePluginOptions },
+        options: { payload: { maxBytes: 2000 } },
       };
 
-      server = await setupServer({ registeredLimit: 500 }, [testRoute], { routes: { timeout: { server: false } } });
+      server = await setupServer({}, [testRoute], { routes: { timeout: { server: false } } });
 
       assert(typeof server.info.port === 'number');
 
@@ -291,10 +299,10 @@ describe('hapi-terminator plugin', () => {
         method: 'POST' as const,
         path: '/small-upload',
         handler: () => ({ success: true }),
-        options: { plugins: { 'hapi-terminator': { limit: 300 } } as RoutePluginOptions },
+        options: { payload: { maxBytes: 300 } },
       };
 
-      server = await setupServer({ registeredLimit: 1000 }, [testRoute], { routes: { timeout: { server: false } } });
+      server = await setupServer({}, [testRoute], { routes: { timeout: { server: false } } });
 
       assert(typeof server.info.port === 'number');
       const response = await testSocketDestruction(
@@ -311,9 +319,10 @@ describe('hapi-terminator plugin', () => {
         method: 'POST' as const,
         path: '/test',
         handler: () => ({ success: true }),
+        options: { payload: { maxBytes: 800 } },
       };
 
-      server = await setupServer({ registeredLimit: 800 }, [testRoute], { routes: { timeout: { server: false } } });
+      server = await setupServer({}, [testRoute], { routes: { timeout: { server: false } } });
 
       assert(typeof server.info.port === 'number');
       const response = await testSocketDestruction(
@@ -330,10 +339,10 @@ describe('hapi-terminator plugin', () => {
         method: 'POST' as const,
         path: '/unlimited',
         handler: () => ({ success: true }),
-        options: { plugins: { 'hapi-terminator': { limit: null } } as RoutePluginOptions },
+        options: { payload: { maxBytes: null } },
       };
 
-      server = await setupServer({ registeredLimit: 500 }, [testRoute]);
+      server = await setupServer({}, [testRoute]);
 
       assert(typeof server.info.port === 'number');
       const response = await makeRequest(
@@ -349,17 +358,17 @@ describe('hapi-terminator plugin', () => {
         method: 'POST' as const,
         path: '/small',
         handler: () => ({ success: true }),
-        options: { plugins: { 'hapi-terminator': { limit: 300 } } as RoutePluginOptions },
+        options: { payload: { maxBytes: 300 } },
       };
 
       const largeRoute = {
         method: 'POST' as const,
         path: '/large',
         handler: () => ({ success: true }),
-        options: { plugins: { 'hapi-terminator': { limit: 2000 } } as RoutePluginOptions },
+        options: { payload: { maxBytes: 2000 } },
       };
 
-      server = await setupServer({ registeredLimit: 1000 }, [smallRoute, largeRoute], {
+      server = await setupServer({}, [smallRoute, largeRoute], {
         routes: { timeout: { server: false } },
       });
 
@@ -384,11 +393,15 @@ describe('hapi-terminator plugin', () => {
 
   describe('mixed configuration', () => {
     test('should apply different limits for registered vs unregistered routes', async () => {
-      server = await setupServer(
-        { registeredLimit: 1000, unregisteredLimit: 500 },
-        [{ method: 'POST' as const, path: '/api/data', handler: () => ({ success: true }) }],
-        { routes: { timeout: { server: false } } },
-      );
+      const registeredRoute = {
+        method: 'POST' as const,
+        path: '/api/data',
+        handler: () => ({ success: true }),
+        options: { payload: { maxBytes: 1000 } },
+      };
+      server = await setupServer({ unregisteredLimit: 500 }, [registeredRoute], {
+        routes: { timeout: { server: false } },
+      });
 
       assert(typeof server.info.port === 'number');
       const registeredResponse = await makeRequest(
@@ -421,7 +434,7 @@ describe('hapi-terminator plugin', () => {
         contentLength: 0,
       },
     ])('should work with $method requests', async ({ method, path, handler, contentLength }) => {
-      server = await setupServer({ registeredLimit: 1000 }, [{ method, path, handler }]);
+      server = await setupServer({}, [{ method, path, handler }]);
 
       assert(typeof server.info.port === 'number');
       const response = await makeRequest(
@@ -433,11 +446,13 @@ describe('hapi-terminator plugin', () => {
     });
 
     test('should reject oversized PUT requests', async () => {
-      server = await setupServer(
-        { registeredLimit: 1000 },
-        [{ method: 'PUT' as const, path: '/resource', handler: () => ({ updated: true }) }],
-        { routes: { timeout: { server: false } } },
-      );
+      const putRoute = {
+        method: 'PUT' as const,
+        path: '/resource',
+        handler: () => ({ updated: true }),
+        options: { payload: { maxBytes: 1000 } },
+      };
+      server = await setupServer({}, [putRoute], { routes: { timeout: { server: false } } });
 
       assert(typeof server.info.port === 'number');
       const response = await testSocketDestruction(

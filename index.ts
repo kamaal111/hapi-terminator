@@ -7,8 +7,6 @@ import pkg from './package.json';
 
 type LimitOptionName = (typeof LIMIT_OPTION_NAMES)[keyof typeof LIMIT_OPTION_NAMES];
 
-export type TerminatorRouteOptions = z.infer<typeof TerminatorRouteOptionsSchema>;
-
 export type TerminatorOptions = z.infer<typeof TerminatorOptionsSchema>;
 
 const LIMIT_OPTION_NAMES = {
@@ -21,10 +19,6 @@ assert(PACKAGE_NAME === pkg.name);
 
 export const plugin = { pkg, register };
 
-const TerminatorRouteOptionsSchema = z.nullish(
-  z.object({ [PACKAGE_NAME]: z.object({ limit: z.nullish(z.number().check(z.minimum(0))) }) }),
-);
-
 const TerminatorOptionsSchema = z.nullish(
   z.object({
     registeredLimit: z.nullish(z.number().check(z.minimum(0))),
@@ -34,12 +28,11 @@ const TerminatorOptionsSchema = z.nullish(
 
 async function register(server: Server, rawOptions: TerminatorOptions) {
   const options = TerminatorOptionsSchema.parse(rawOptions);
-  const routeOptionsCache = new Map<string, TerminatorRouteOptions>();
 
-  server.ext('onRequest', validateHookHandler(options, routeOptionsCache));
+  server.ext('onRequest', validateHookHandler(options));
 }
 
-function validateHookHandler(pluginOptions: TerminatorOptions, routeOptionsCache: Map<string, TerminatorRouteOptions>) {
+function validateHookHandler(pluginOptions: TerminatorOptions) {
   return (request: Request, h: ResponseToolkit) => {
     const handler = validateRoute(request, h, pluginOptions);
 
@@ -53,9 +46,10 @@ function validateHookHandler(pluginOptions: TerminatorOptions, routeOptionsCache
       return h.continue;
     }
 
-    const { route, options } = getRouteAndOptions(request, routeOptionsCache) ?? {};
+    const route = getRoute(request);
     if (route != null) {
-      return handler(contentLength, LIMIT_OPTION_NAMES.REGISTERED, options, option => {
+      const maxBytes = route.settings.payload?.maxBytes;
+      return handler(contentLength, LIMIT_OPTION_NAMES.REGISTERED, maxBytes, option => {
         return h
           .response({
             error: 'Request Entity Too Large',
@@ -66,44 +60,25 @@ function validateHookHandler(pluginOptions: TerminatorOptions, routeOptionsCache
       });
     }
 
-    assert(options == null, "Unregistered routes can't have route options");
-
     return handler(contentLength, LIMIT_OPTION_NAMES.UNREGISTERED, null, () => {
       return h.response({ error: 'Not Found', message: 'Not Found', statusCode: 404 }).code(404);
     });
   };
 }
 
-function getRouteAndOptions(
-  request: Request,
-  routeOptionsCache: Map<string, TerminatorRouteOptions>,
-): { route: RequestRoute; options: TerminatorRouteOptions } | null {
-  const matchedRoute = request.server.match(request.method, request.path, request.info.host);
-  if (matchedRoute == null) {
-    return null;
-  }
-
-  const cacheKey = `${matchedRoute.method}-${matchedRoute.path}`;
-  const cachedResult = routeOptionsCache.get(cacheKey);
-  if (cachedResult != null) {
-    return { options: cachedResult, route: matchedRoute };
-  }
-
-  const options = getRoutePluginSettings(matchedRoute);
-  routeOptionsCache.set(cacheKey, options);
-
-  return { options, route: matchedRoute };
+function getRoute(request: Request): RequestRoute | null {
+  return request.server.match(request.method, request.path, request.info.host);
 }
 
 function validateRoute(request: Request, h: ResponseToolkit, options: TerminatorOptions) {
   return (
     contentLength: number,
     optionName: LimitOptionName,
-    routeOptions: TerminatorRouteOptions,
+    maxBytes: number | null | undefined,
     response: (option: number) => ResponseObject,
   ) => {
     const option = options?.[optionName];
-    const limit = routeOptions?.[PACKAGE_NAME]?.limit ?? option;
+    const limit = maxBytes ?? option;
     if (limit == null) {
       return h.continue;
     }
@@ -139,10 +114,6 @@ function closeSocketsOnFinish(request: Request) {
       socket.end();
     }
   });
-}
-
-function getRoutePluginSettings(matchedRoute: RequestRoute | null): TerminatorRouteOptions {
-  return TerminatorRouteOptionsSchema.safeParse(matchedRoute?.settings.plugins).data;
 }
 
 export default { plugin };
