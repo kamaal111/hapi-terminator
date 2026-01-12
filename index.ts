@@ -1,27 +1,14 @@
-import assert from 'node:assert';
-
-import type { Server, Request, ResponseToolkit, RequestRoute, ResponseObject } from '@hapi/hapi';
+import type { Server, Request, ResponseToolkit, ResponseObject } from '@hapi/hapi';
 import { z } from 'zod/mini';
 
 import pkg from './package.json';
 
-type LimitOptionName = (typeof LIMIT_OPTION_NAMES)[keyof typeof LIMIT_OPTION_NAMES];
-
 export type TerminatorOptions = z.infer<typeof TerminatorOptionsSchema>;
-
-const LIMIT_OPTION_NAMES = {
-  REGISTERED: 'registeredLimit',
-  UNREGISTERED: 'unregisteredLimit',
-} as const;
-
-const PACKAGE_NAME = 'hapi-terminator';
-assert(PACKAGE_NAME === pkg.name);
 
 export const plugin = { pkg, register };
 
 const TerminatorOptionsSchema = z.nullish(
   z.object({
-    registeredLimit: z.nullish(z.number().check(z.minimum(0))),
     unregisteredLimit: z.union([z.nullish(z.number().check(z.minimum(0))), z.boolean()]),
   }),
 );
@@ -34,22 +21,20 @@ async function register(server: Server, rawOptions: TerminatorOptions) {
 
 function validateHookHandler(pluginOptions: TerminatorOptions) {
   return (request: Request, h: ResponseToolkit) => {
-    const handler = validateRoute(request, h, pluginOptions);
+    const handler = validateRoute(request, h);
 
-    const rawContentLength = request.headers['content-length'];
-    if (!rawContentLength) {
+    const hasTransferEncoding = Boolean(request.headers['transfer-encoding']);
+    const rawContentLength: string | undefined = request.headers['content-length'];
+    const willProcessPayload = hasTransferEncoding || Boolean(rawContentLength);
+    if (!willProcessPayload) {
       return h.continue;
     }
 
-    const contentLength = Number.parseInt(rawContentLength, 10);
-    if (Number.isNaN(contentLength)) {
-      return h.continue;
-    }
-
-    const route = getRoute(request);
+    const contentLength = Number.parseInt(rawContentLength || '0', 10);
+    const route = request.server.match(request.method, request.path, request.info.host);
     if (route != null) {
       const maxBytes = route.settings.payload?.maxBytes;
-      return handler(contentLength, LIMIT_OPTION_NAMES.REGISTERED, maxBytes, option => {
+      return handler(contentLength, maxBytes, option => {
         return h
           .response({
             error: 'Request Entity Too Large',
@@ -60,25 +45,18 @@ function validateHookHandler(pluginOptions: TerminatorOptions) {
       });
     }
 
-    return handler(contentLength, LIMIT_OPTION_NAMES.UNREGISTERED, null, () => {
+    return handler(contentLength, (hasTransferEncoding ? 0 : null) ?? pluginOptions?.unregisteredLimit, () => {
       return h.response({ error: 'Not Found', message: 'Not Found', statusCode: 404 }).code(404);
     });
   };
 }
 
-function getRoute(request: Request): RequestRoute | null {
-  return request.server.match(request.method, request.path, request.info.host);
-}
-
-function validateRoute(request: Request, h: ResponseToolkit, options: TerminatorOptions) {
+function validateRoute(request: Request, h: ResponseToolkit) {
   return (
     contentLength: number,
-    optionName: LimitOptionName,
-    maxBytes: number | null | undefined,
+    limit: number | boolean | null | undefined,
     response: (option: number) => ResponseObject,
   ) => {
-    const option = options?.[optionName];
-    const limit = maxBytes ?? option;
     if (limit == null) {
       return h.continue;
     }
@@ -94,14 +72,14 @@ function validateRoute(request: Request, h: ResponseToolkit, options: Terminator
       return result;
     }
 
-    if (contentLength <= limit) {
-      return h.continue;
+    if (limit === 0 || contentLength > limit) {
+      const result = response(limit).takeover();
+      closeSocketsOnFinish(request);
+
+      return result;
     }
 
-    const result = response(limit).takeover();
-    closeSocketsOnFinish(request);
-
-    return result;
+    return h.continue;
   };
 }
 

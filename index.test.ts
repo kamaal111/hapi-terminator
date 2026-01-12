@@ -101,7 +101,7 @@ describe('hapi-terminator plugin', () => {
     });
 
     test('should register with options', async () => {
-      server = await setupServer({ registeredLimit: 1000, unregisteredLimit: 500 });
+      server = await setupServer({ unregisteredLimit: 500 });
       assert(typeof server.registrations === 'object');
       assert('hapi-terminator' in server.registrations);
     });
@@ -272,7 +272,7 @@ describe('hapi-terminator plugin', () => {
   });
 
   describe('per-route limit configuration', () => {
-    test('should allow route-specific limit to override registered limit', async () => {
+    test('should use route-specific maxBytes limit', async () => {
       const testRoute = {
         method: 'POST' as const,
         path: '/upload',
@@ -284,7 +284,7 @@ describe('hapi-terminator plugin', () => {
 
       assert(typeof server.info.port === 'number');
 
-      // Request with 1500 bytes should be blocked by global limit (500) but allowed by route limit (2000)
+      // Request should be allowed as it's within the route's maxBytes limit (2000)
       // So this should NOT destroy the socket
       const response = await makeRequest(
         server.info.port,
@@ -314,7 +314,7 @@ describe('hapi-terminator plugin', () => {
       expect(response).toContain('Payload content length greater than maximum allowed: 300');
     });
 
-    test('should use global limit when route has no specific limit', async () => {
+    test('should respect route-specific maxBytes limit', async () => {
       const testRoute = {
         method: 'POST' as const,
         path: '/test',
@@ -462,6 +462,86 @@ describe('hapi-terminator plugin', () => {
 
       expect(response).toContain('413');
       expect(response).toContain('Payload content length greater than maximum allowed: 1000');
+    });
+  });
+
+  describe('transfer-encoding header', () => {
+    describe('unregistered routes', () => {
+      test('should gracefully end socket for unregistered route with transfer-encoding chunked', async () => {
+        server = await setupServer({}, undefined, { routes: { timeout: { server: false } } });
+
+        assert(typeof server.info.port === 'number');
+        const response = await testSocketDestruction(
+          server.info.port,
+          'POST /nonexistent HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n',
+        );
+
+        expect(response).toContain('404');
+        expect(response).toContain('Not Found');
+      });
+
+      test('should gracefully end socket for unregistered route with transfer-encoding and unregisteredLimit', async () => {
+        server = await setupServer({ unregisteredLimit: 1000 }, undefined, { routes: { timeout: { server: false } } });
+
+        assert(typeof server.info.port === 'number');
+        const response = await testSocketDestruction(
+          server.info.port,
+          'POST /nonexistent HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n',
+        );
+
+        expect(response).toContain('404');
+        expect(response).toContain('Not Found');
+      });
+
+      test('should gracefully end socket for unregistered route with transfer-encoding when unregisteredLimit is false', async () => {
+        server = await setupServer({ unregisteredLimit: false }, undefined, { routes: { timeout: { server: false } } });
+
+        assert(typeof server.info.port === 'number');
+        const response = await testSocketDestruction(
+          server.info.port,
+          'POST /nonexistent HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n',
+        );
+
+        expect(response).toContain('404');
+        expect(response).toContain('Not Found');
+      });
+    });
+
+    describe('registered routes', () => {
+      test('should allow registered route with transfer-encoding when no maxBytes set', async () => {
+        const testRoute = {
+          method: 'POST' as const,
+          path: '/test',
+          handler: () => ({ success: true }),
+        };
+        server = await setupServer({}, [testRoute]);
+
+        assert(typeof server.info.port === 'number');
+        const response = await makeRequest(
+          server.info.port,
+          'POST /test HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n',
+        );
+
+        expect(response).toContain('200');
+      });
+
+      test('should allow registered route with transfer-encoding when within maxBytes', async () => {
+        const testRoute = {
+          method: 'POST' as const,
+          path: '/test',
+          handler: () => ({ success: true }),
+          options: { payload: { maxBytes: 1000 } },
+        };
+        server = await setupServer({}, [testRoute]);
+
+        assert(typeof server.info.port === 'number');
+        const response = await makeRequest(
+          server.info.port,
+          'POST /test HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n',
+        );
+
+        expect(response).toContain('200');
+      });
     });
   });
 });
