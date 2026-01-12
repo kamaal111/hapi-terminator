@@ -44,7 +44,7 @@ await server.register({
 });
 
 server.route({
-  method: ['GET', 'POST'],
+  method: ['POST'],
   path: '/',
   handler: () => 'Hello World!',
   options: {
@@ -62,7 +62,7 @@ console.log('Server running on %s', server.info.uri);
 
 You can set limits for specific routes using Hapi's native `payload.maxBytes` configuration:
 
-````typescript
+```typescript
 import Hapi from '@hapi/hapi';
 import terminatorPlugin, { type TerminatorOptions } from 'hapi-terminator';
 
@@ -75,16 +75,10 @@ await server.register({
   },
 });
 
-// Standard route with 500KB limit
 server.route({
   method: ['GET', 'POST'],
   path: '/',
   handler: () => 'Hello World!',
-  options: {
-    payload: {
-      maxBytes: 500 * 1024, // 500KB
-    },
-  },
 });
 
 // Upload route with higher limit (10MB)
@@ -99,7 +93,8 @@ server.route({
   },
 });
 
-});\n\nawait server.start();\n```
+await server.start();
+```
 
 ### Boolean Limits for Unregistered Routes
 
@@ -133,7 +128,7 @@ server.route({
 
 // Any request to unregistered routes (e.g., /unknown) will be rejected immediately
 await server.start();
-````
+```
 
 You can also set `unregisteredLimit` to `false` to bypass payload size checks for unregistered routes:
 
