@@ -1,6 +1,6 @@
 # hapi-terminator
 
-A Hapi plugin that terminates requests with payloads that exceed a specified size limit. This plugin helps protect your server from excessively large payloads by destroying the socket connection before the entire payload is processed.
+A Hapi plugin that terminates requests with payloads that exceed a specified size limit. This plugin helps protect your server from excessively large payloads by gracefully ending the socket connection before the entire payload is processed.
 
 ## Features
 
@@ -127,8 +127,8 @@ You can configure per-route limits using the route options:
 
 ### Behavior
 
-- **Registered Routes**: When a payload exceeds the limit on a registered route, the socket is destroyed and a `413 Payload Too Large` error is thrown.
-- **Unregistered Routes**: When a payload exceeds the limit on an unregistered route, the socket is destroyed and a `404 Not Found` error is thrown.
+- **Registered Routes**: When a payload exceeds the limit on a registered route, the socket is gracefully ended and a `413 Payload Too Large` error is returned.
+- **Unregistered Routes**: When a payload exceeds the limit on an unregistered route, the socket is gracefully ended and a `404 Not Found` error is returned.
 - **Per-Route Limits**: Route-specific limits take precedence over global limits, allowing you to customize limits for individual routes.
 - **Disabled**: Set to `null` or `undefined` to disable termination for that category or route.
 
@@ -136,8 +136,8 @@ You can configure per-route limits using the route options:
 
 The plugin hooks into Hapi's `onRequest` extension point and checks the `Content-Length` header of incoming requests. If the content length exceeds the configured threshold:
 
-1. The socket connection is immediately destroyed
-2. An appropriate error response is thrown (413 for registered routes, 404 for unregistered routes)
+1. An appropriate error response is returned (413 for registered routes, 404 for unregistered routes)
+2. The socket connection is gracefully ended after the response is sent
 3. No further processing occurs, saving server resources
 
 ## License

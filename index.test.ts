@@ -142,7 +142,7 @@ describe('hapi-terminator plugin', () => {
         expect(response).toContain(expectStatus);
       });
 
-      test('should destroy socket for requests above the limit', async () => {
+      test('should gracefully end socket for requests above the limit', async () => {
         server = await setupServer({ registeredLimit: 1000 }, [testRoute], { routes: { timeout: { server: false } } });
 
         assert(typeof server.info.port === 'number');
@@ -151,7 +151,8 @@ describe('hapi-terminator plugin', () => {
           'POST /test HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2000\r\n\r\n',
         );
 
-        expect(response).toBe('');
+        expect(response).toContain('413');
+        expect(response).toContain('Payload content length greater than maximum allowed: 1000');
       });
 
       test('should continue when no content-length header', async () => {
@@ -193,7 +194,7 @@ describe('hapi-terminator plugin', () => {
         expect(response).toContain('404');
       });
 
-      test('should destroy socket for large payloads on unregistered routes', async () => {
+      test('should gracefully end socket for large payloads on unregistered routes', async () => {
         server = await setupServer({ unregisteredLimit: 500 }, undefined, { routes: { timeout: { server: false } } });
 
         assert(typeof server.info.port === 'number');
@@ -202,7 +203,8 @@ describe('hapi-terminator plugin', () => {
           'POST /nonexistent HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1000\r\n\r\n',
         );
 
-        expect(response).toBe('');
+        expect(response).toContain('404');
+        expect(response).toContain('Not Found');
       });
     });
 
@@ -244,7 +246,7 @@ describe('hapi-terminator plugin', () => {
       expect(response).toContain('200');
     });
 
-    test('should destroy socket when route-specific limit is exceeded', async () => {
+    test('should gracefully end socket when route-specific limit is exceeded', async () => {
       const testRoute = {
         method: 'POST' as const,
         path: '/small-upload',
@@ -260,7 +262,8 @@ describe('hapi-terminator plugin', () => {
         'POST /small-upload HTTP/1.1\r\nHost: localhost\r\nContent-Length: 500\r\n\r\n',
       );
 
-      expect(response).toBe('');
+      expect(response).toContain('413');
+      expect(response).toContain('Payload content length greater than maximum allowed: 300');
     });
 
     test('should use global limit when route has no specific limit', async () => {
@@ -278,7 +281,8 @@ describe('hapi-terminator plugin', () => {
         'POST /test HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1000\r\n\r\n',
       );
 
-      expect(response).toBe('');
+      expect(response).toContain('413');
+      expect(response).toContain('Payload content length greater than maximum allowed: 800');
     });
 
     test('should allow request when route-specific limit is null', async () => {
@@ -326,7 +330,8 @@ describe('hapi-terminator plugin', () => {
         server.info.port,
         'POST /small HTTP/1.1\r\nHost: localhost\r\nContent-Length: 500\r\n\r\n',
       );
-      expect(smallResponse).toBe('');
+      expect(smallResponse).toContain('413');
+      expect(smallResponse).toContain('Payload content length greater than maximum allowed: 300');
 
       // Large route with same payload should succeed
       const largeResponse = await makeRequest(
@@ -356,7 +361,8 @@ describe('hapi-terminator plugin', () => {
         server.info.port,
         'POST /nonexistent HTTP/1.1\r\nHost: localhost\r\nContent-Length: 900\r\n\r\n',
       );
-      expect(unregisteredResponse).toBe('');
+      expect(unregisteredResponse).toContain('404');
+      expect(unregisteredResponse).toContain('Not Found');
     });
   });
 
@@ -399,7 +405,8 @@ describe('hapi-terminator plugin', () => {
         'PUT /resource HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2000\r\nHost: localhost\r\nContent-Length: 2000\r\n\r\n',
       );
 
-      expect(response).toBe('');
+      expect(response).toContain('413');
+      expect(response).toContain('Payload content length greater than maximum allowed: 1000');
     });
   });
 });
