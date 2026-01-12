@@ -1,7 +1,5 @@
-import Hapi, { type PluginSpecificConfiguration } from '@hapi/hapi';
-import terminatorPlugin, { type TerminatorOptions, type TerminatorRouteOptions } from 'hapi-terminator';
-
-type RoutePluginOptions = PluginSpecificConfiguration & TerminatorRouteOptions;
+import Hapi from '@hapi/hapi';
+import terminatorPlugin, { type TerminatorOptions } from 'hapi-terminator';
 
 process.on('unhandledRejection', err => {
   console.log(err);
@@ -12,7 +10,6 @@ const server = Hapi.server({ port: 3000, host: '127.0.0.1' });
 
 const requestTerminateOptions: TerminatorOptions = {
   unregisteredLimit: 500 * 1024, // 500KB - destroy socket for larger payloads on unregistered routes
-  registeredLimit: 500 * 1024, // 500KB - destroy socket for larger payloads on registered routes
 };
 
 await server.register({
@@ -30,13 +27,28 @@ server.route({
   method: ['POST'],
   path: '/',
   handler: () => 'Hello World!',
-  options: { plugins: { 'hapi-terminator': { limit: 1000 * 1024 } } as RoutePluginOptions },
+  options: {
+    payload: {
+      maxBytes: 1000 * 1024, // 1MB - higher limit for POST
+    },
+  },
 });
 
 server.route({
-  method: ['GET', 'POST'],
+  method: ['GET'],
   path: '/{id}',
   handler: request => `Hello ${request.params.id}!`,
+});
+
+server.route({
+  method: ['POST'],
+  path: '/{id}',
+  handler: request => `Hello ${request.params.id}!`,
+  options: {
+    payload: {
+      maxBytes: 500 * 1024,
+    },
+  },
 });
 
 await server.start();

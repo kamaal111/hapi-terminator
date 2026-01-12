@@ -36,7 +36,6 @@ const server = Hapi.server({ port: 3000, host: '127.0.0.1' });
 
 const requestTerminateOptions: TerminatorOptions = {
   unregisteredLimit: 500 * 1024, // 500KB for unregistered routes
-  registeredLimit: 500 * 1024, // 500KB for registered routes
 };
 
 await server.register({
@@ -48,6 +47,11 @@ server.route({
   method: ['GET', 'POST'],
   path: '/',
   handler: () => 'Hello World!',
+  options: {
+    payload: {
+      maxBytes: 500 * 1024, // 500KB limit for this route
+    },
+  },
 });
 
 await server.start();
@@ -56,29 +60,31 @@ console.log('Server running on %s', server.info.uri);
 
 ### Per-Route Limits
 
-You can override the global limits for specific routes by setting the limit in the route options:
+You can set limits for specific routes using Hapi's native `payload.maxBytes` configuration:
 
-```typescript
-import Hapi, { type PluginSpecificConfiguration } from '@hapi/hapi';
-import terminatorPlugin, { type TerminatorOptions, type TerminatorRouteOptions } from 'hapi-terminator';
-
-type RoutePluginOptions = PluginSpecificConfiguration & TerminatorRouteOptions;
+````typescript
+import Hapi from '@hapi/hapi';
+import terminatorPlugin, { type TerminatorOptions } from 'hapi-terminator';
 
 const server = Hapi.server({ port: 3000, host: '127.0.0.1' });
 
 await server.register({
   plugin: terminatorPlugin,
   options: {
-    registeredLimit: 500 * 1024, // 500KB default for registered routes
     unregisteredLimit: 100 * 1024, // 100KB for unregistered routes
   },
 });
 
-// Standard route with default limit (500KB)
+// Standard route with 500KB limit
 server.route({
   method: ['GET', 'POST'],
   path: '/',
   handler: () => 'Hello World!',
+  options: {
+    payload: {
+      maxBytes: 500 * 1024, // 500KB
+    },
+  },
 });
 
 // Upload route with higher limit (10MB)
@@ -87,26 +93,13 @@ server.route({
   path: '/upload',
   handler: () => ({ success: true }),
   options: {
-    plugins: {
-      'hapi-terminator': { limit: 10 * 1024 * 1024 }, // 10MB
-    } as RoutePluginOptions,
+    payload: {
+      maxBytes: 10 * 1024 * 1024, // 10MB
+    },
   },
 });
 
-// Unlimited route (disable limit for this specific route)
-server.route({
-  method: ['POST'],
-  path: '/stream',
-  handler: () => ({ success: true }),
-  options: {
-    plugins: {
-      'hapi-terminator': { limit: null }, // No limit
-    } as RoutePluginOptions,
-  },
-});
-
-await server.start();
-```
+});\n\nawait server.start();\n```
 
 ### Boolean Limits for Unregistered Routes
 
@@ -122,7 +115,6 @@ const server = Hapi.server({ port: 3000, host: '127.0.0.1' });
 await server.register({
   plugin: terminatorPlugin,
   options: {
-    registeredLimit: 1024 * 1024, // 1MB for registered routes
     unregisteredLimit: true, // Immediately reject all unregistered routes
   },
 });
@@ -132,11 +124,16 @@ server.route({
   method: ['POST'],
   path: '/api/data',
   handler: () => ({ success: true }),
+  options: {
+    payload: {
+      maxBytes: 1024 * 1024, // 1MB
+    },
+  },
 });
 
 // Any request to unregistered routes (e.g., /unknown) will be rejected immediately
 await server.start();
-```
+````
 
 You can also set `unregisteredLimit` to `false` to bypass payload size checks for unregistered routes:
 
@@ -144,7 +141,6 @@ You can also set `unregisteredLimit` to `false` to bypass payload size checks fo
 await server.register({
   plugin: terminatorPlugin,
   options: {
-    registeredLimit: 500 * 1024, // 500KB for registered routes
     unregisteredLimit: false, // Bypass payload size checks for unregistered routes
   },
 });
@@ -156,23 +152,33 @@ await server.register({
 
 | Option              | Type                | Description                                                                                                                                                                                                   |
 | ------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `registeredLimit`   | `number`            | Maximum payload size in bytes for registered routes. Must be >= 0. Set to `null` or `undefined` to disable.                                                                                                   |
 | `unregisteredLimit` | `number \| boolean` | Maximum payload size in bytes for unregistered routes. Must be >= 0. Set to `null` or `undefined` to disable. Set to `true` to reject all requests immediately. Set to `false` to bypass payload size checks. |
 
-### TerminatorRouteOptions
+### Route Payload Configuration
 
-You can configure per-route limits using the route options:
+Use Hapi's native `payload.maxBytes` option in your route configuration to set per-route limits:
 
-| Option  | Type     | Description                                                                                                                            |
-| ------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `limit` | `number` | Maximum payload size in bytes for this specific route. Must be >= 0. Overrides the global `registeredLimit`. Set to `null` to disable. |
+Use Hapi's native `payload.maxBytes` option in your route configuration to set per-route limits:
+
+```typescript
+server.route({
+  method: 'POST',
+  path: '/upload',
+  handler: () => ({ success: true }),
+  options: {
+    payload: {
+      maxBytes: 10 * 1024 * 1024, // 10MB
+    },
+  },
+});
+```
 
 ### Behavior
 
-- **Registered Routes**: When a payload exceeds the limit on a registered route, the socket is gracefully ended and a `413 Payload Too Large` error is returned.
-- **Unregistered Routes**: When a payload exceeds the limit on an unregistered route, the socket is gracefully ended and a `404 Not Found` error is returned.
-- **Per-Route Limits**: Route-specific limits take precedence over global limits, allowing you to customize limits for individual routes.
-- **Disabled**: Set to `null` or `undefined` to disable termination for that category or route.
+- **Registered Routes**: Routes use Hapi's native `payload.maxBytes` setting. When a payload exceeds this limit, the socket is gracefully ended and a `413 Payload Too Large` error is returned.
+- **Unregistered Routes**: When a payload exceeds the `unregisteredLimit`, the socket is gracefully ended and a `404 Not Found` error is returned.
+- **Per-Route Limits**: Use Hapi's `payload.maxBytes` to customize limits for individual routes.
+- **Disabled**: Omit `payload.maxBytes` to allow unlimited payload size for a route.
 - **Boolean Values for Unregistered Routes**:
   - Set `unregisteredLimit` to `true` to immediately reject all unregistered route requests regardless of Content-Length (even 0 bytes).
   - Set `unregisteredLimit` to `false` to bypass payload size checks for unregistered route requests (they will still receive 404 responses).
