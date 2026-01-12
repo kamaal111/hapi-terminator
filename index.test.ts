@@ -221,6 +221,46 @@ describe('hapi-terminator plugin', () => {
         expect(response).toContain('404');
       });
     });
+
+    describe('with boolean limit', () => {
+      test('should return 404 immediately when unregisteredLimit is true, even with contentLength 0', async () => {
+        server = await setupServer({ unregisteredLimit: true }, undefined, { routes: { timeout: { server: false } } });
+
+        assert(typeof server.info.port === 'number');
+        const response = await testSocketDestruction(
+          server.info.port,
+          'POST /nonexistent HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n',
+        );
+
+        expect(response).toContain('404');
+        expect(response).toContain('Not Found');
+      });
+
+      test('should return 404 immediately when unregisteredLimit is true with any contentLength', async () => {
+        server = await setupServer({ unregisteredLimit: true }, undefined, { routes: { timeout: { server: false } } });
+
+        assert(typeof server.info.port === 'number');
+        const response = await testSocketDestruction(
+          server.info.port,
+          'POST /nonexistent HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5000\r\n\r\n',
+        );
+
+        expect(response).toContain('404');
+        expect(response).toContain('Not Found');
+      });
+
+      test('should return 404 normally when unregisteredLimit is false', async () => {
+        server = await setupServer({ unregisteredLimit: false });
+
+        assert(typeof server.info.port === 'number');
+        const response = await makeRequest(
+          server.info.port,
+          'POST /nonexistent HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n',
+        );
+
+        expect(response).toContain('404');
+      });
+    });
   });
 
   describe('per-route limit configuration', () => {

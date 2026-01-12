@@ -108,14 +108,56 @@ server.route({
 await server.start();
 ```
 
+### Boolean Limits for Unregistered Routes
+
+You can use boolean values for `unregisteredLimit` to control unregistered route behavior:
+
+```typescript
+import Hapi from '@hapi/hapi';
+import terminatorPlugin, { type TerminatorOptions } from 'hapi-terminator';
+
+const server = Hapi.server({ port: 3000, host: '127.0.0.1' });
+
+// Reject all unregistered routes immediately
+await server.register({
+  plugin: terminatorPlugin,
+  options: {
+    registeredLimit: 1024 * 1024, // 1MB for registered routes
+    unregisteredLimit: true, // Immediately reject all unregistered routes
+  },
+});
+
+// This route will work normally
+server.route({
+  method: ['POST'],
+  path: '/api/data',
+  handler: () => ({ success: true }),
+});
+
+// Any request to unregistered routes (e.g., /unknown) will be rejected immediately
+await server.start();
+```
+
+You can also set `unregisteredLimit` to `false` to bypass payload size checks for unregistered routes:
+
+```typescript
+await server.register({
+  plugin: terminatorPlugin,
+  options: {
+    registeredLimit: 500 * 1024, // 500KB for registered routes
+    unregisteredLimit: false, // Bypass payload size checks for unregistered routes
+  },
+});
+```
+
 ## Configuration
 
 ### TerminatorOptions
 
-| Option              | Type     | Description                                                                                                   |
-| ------------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
-| `registeredLimit`   | `number` | Maximum payload size in bytes for registered routes. Must be >= 0. Set to `null` or `undefined` to disable.   |
-| `unregisteredLimit` | `number` | Maximum payload size in bytes for unregistered routes. Must be >= 0. Set to `null` or `undefined` to disable. |
+| Option              | Type                | Description                                                                                                                                                                                                   |
+| ------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `registeredLimit`   | `number`            | Maximum payload size in bytes for registered routes. Must be >= 0. Set to `null` or `undefined` to disable.                                                                                                   |
+| `unregisteredLimit` | `number \| boolean` | Maximum payload size in bytes for unregistered routes. Must be >= 0. Set to `null` or `undefined` to disable. Set to `true` to reject all requests immediately. Set to `false` to bypass payload size checks. |
 
 ### TerminatorRouteOptions
 
@@ -131,6 +173,9 @@ You can configure per-route limits using the route options:
 - **Unregistered Routes**: When a payload exceeds the limit on an unregistered route, the socket is gracefully ended and a `404 Not Found` error is returned.
 - **Per-Route Limits**: Route-specific limits take precedence over global limits, allowing you to customize limits for individual routes.
 - **Disabled**: Set to `null` or `undefined` to disable termination for that category or route.
+- **Boolean Values for Unregistered Routes**:
+  - Set `unregisteredLimit` to `true` to immediately reject all unregistered route requests regardless of Content-Length (even 0 bytes).
+  - Set `unregisteredLimit` to `false` to bypass payload size checks for unregistered route requests (they will still receive 404 responses).
 
 ## How It Works
 
