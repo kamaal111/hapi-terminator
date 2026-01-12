@@ -1,20 +1,13 @@
 import type { Server, Request, ResponseToolkit, ResponseObject } from '@hapi/hapi';
-import { z } from 'zod/mini';
 
 import pkg from './package.json';
 
-export type TerminatorOptions = z.infer<typeof TerminatorOptionsSchema>;
+export type TerminatorOptions = { unregisteredLimit?: number | boolean | null };
 
 export const plugin = { pkg, register };
 
-const TerminatorOptionsSchema = z.nullish(
-  z.object({
-    unregisteredLimit: z.union([z.nullish(z.number().check(z.minimum(0))), z.boolean()]),
-  }),
-);
-
-async function register(server: Server, rawOptions: TerminatorOptions) {
-  const options = TerminatorOptionsSchema.parse(rawOptions);
+async function register(server: Server, rawOptions: Record<string, unknown> | null | undefined) {
+  const options = validateOptions(rawOptions);
 
   server.ext('onRequest', validateHookHandler(options));
 }
@@ -92,6 +85,27 @@ function closeSocketsOnFinish(request: Request) {
       socket.end();
     }
   });
+}
+
+function validateOptions(options: Record<string, unknown> | null | undefined): TerminatorOptions {
+  if (options == null) {
+    return { unregisteredLimit: null };
+  }
+
+  if (!('unregisteredLimit' in options)) {
+    return { unregisteredLimit: null };
+  }
+
+  const unregisteredLimit = options.unregisteredLimit;
+  if (typeof unregisteredLimit === 'number') {
+    return { unregisteredLimit: Math.max(0, unregisteredLimit) };
+  }
+
+  if (typeof unregisteredLimit === 'boolean') {
+    return { unregisteredLimit };
+  }
+
+  return { unregisteredLimit: null };
 }
 
 export default { plugin };

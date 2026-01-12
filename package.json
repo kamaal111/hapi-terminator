@@ -22,9 +22,6 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.52.0"
   },
-  "dependencies": {
-    "zod": "^4.3.5"
-  },
   "prettier": "@kamaalio/prettier-config",
   "lint-staged": {
     "**/*.{js,ts,tsx}": [
