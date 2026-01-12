@@ -21,12 +21,15 @@ assert(PACKAGE_NAME === pkg.name);
 
 export const plugin = { pkg, register };
 
-const LimitOptionShape = z.nullish(z.number().check(z.minimum(0)));
-
-const TerminatorRouteOptionsSchema = z.nullish(z.object({ [PACKAGE_NAME]: z.object({ limit: LimitOptionShape }) }));
+const TerminatorRouteOptionsSchema = z.nullish(
+  z.object({ [PACKAGE_NAME]: z.object({ limit: z.nullish(z.number().check(z.minimum(0))) }) }),
+);
 
 const TerminatorOptionsSchema = z.nullish(
-  z.object({ registeredLimit: LimitOptionShape, unregisteredLimit: LimitOptionShape }),
+  z.object({
+    registeredLimit: z.nullish(z.number().check(z.minimum(0))),
+    unregisteredLimit: z.union([z.nullish(z.number().check(z.minimum(0))), z.boolean()]),
+  }),
 );
 
 async function register(server: Server, rawOptions: TerminatorOptions) {
@@ -103,6 +106,20 @@ function validateRoute(request: Request, h: ResponseToolkit, options: Terminator
     const limit = routeOptions?.[PACKAGE_NAME]?.limit ?? option;
     if (limit == null) {
       return h.continue;
+    }
+
+    if (limit === false) {
+      return h.continue;
+    }
+
+    if (limit === true) {
+      const result = response(0).takeover();
+
+      request.raw.res.once('finish', () => {
+        request.raw.req.socket.end();
+      });
+
+      return result;
     }
 
     if (contentLength <= limit) {
