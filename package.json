@@ -1,7 +1,7 @@
 {
   "name": "hapi-terminator",
-  "main": "dist/index.js",
-  "typings": "dist/index.d.ts",
+  "main": "index.js",
+  "typings": "index.d.ts",
   "type": "module",
   "version": "0.0.1",
   "license": "MIT",
@@ -47,6 +47,7 @@
     "access": "public"
   },
   "files": [
-    "dist"
+    "index.js",
+    "index.d.ts"
   ]
 }

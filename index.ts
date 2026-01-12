@@ -114,10 +114,7 @@ function validateRoute(request: Request, h: ResponseToolkit, options: Terminator
 
     if (limit === true) {
       const result = response(0).takeover();
-
-      request.raw.res.once('finish', () => {
-        request.raw.req.socket.end();
-      });
+      closeSocketsOnFinish(request);
 
       return result;
     }
@@ -127,13 +124,21 @@ function validateRoute(request: Request, h: ResponseToolkit, options: Terminator
     }
 
     const result = response(limit).takeover();
-
-    request.raw.res.once('finish', () => {
-      request.raw.req.socket.end();
-    });
+    closeSocketsOnFinish(request);
 
     return result;
   };
+}
+
+function closeSocketsOnFinish(request: Request) {
+  request.raw.res.once('finish', () => {
+    const socket = request.raw.req.socket;
+    if (socket.destroy) {
+      socket.destroy();
+    } else {
+      socket.end();
+    }
+  });
 }
 
 function getRoutePluginSettings(matchedRoute: RequestRoute | null): TerminatorRouteOptions {
