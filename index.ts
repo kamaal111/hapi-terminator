@@ -1,7 +1,6 @@
 import assert from 'node:assert';
 
-import type { Server, Request, ResponseToolkit, RequestRoute } from '@hapi/hapi';
-import Boom from '@hapi/boom';
+import type { Server, Request, ResponseToolkit, RequestRoute, ResponseObject } from '@hapi/hapi';
 import { z } from 'zod/mini';
 
 import pkg from './package.json';
@@ -54,14 +53,20 @@ function validateHookHandler(pluginOptions: TerminatorOptions, routeOptionsCache
     const { route, options } = getRouteAndOptions(request, routeOptionsCache) ?? {};
     if (route != null) {
       return handler(contentLength, LIMIT_OPTION_NAMES.REGISTERED, options, option => {
-        throw Boom.entityTooLarge(`Payload content length greater than maximum allowed: ${option}`);
+        return h
+          .response({
+            error: 'Request Entity Too Large',
+            message: `Payload content length greater than maximum allowed: ${option}`,
+            statusCode: 413,
+          })
+          .code(413);
       });
     }
 
     assert(options == null, "Unregistered routes can't have route options");
 
     return handler(contentLength, LIMIT_OPTION_NAMES.UNREGISTERED, null, () => {
-      throw Boom.notFound();
+      return h.response({ error: 'Not Found', message: 'Not Found', statusCode: 404 }).code(404);
     });
   };
 }
@@ -70,7 +75,7 @@ function getRouteAndOptions(
   request: Request,
   routeOptionsCache: Map<string, TerminatorRouteOptions>,
 ): { route: RequestRoute; options: TerminatorRouteOptions } | null {
-  const matchedRoute = request.server.match(request.method, request.path);
+  const matchedRoute = request.server.match(request.method, request.path, request.info.host);
   if (matchedRoute == null) {
     return null;
   }
@@ -92,7 +97,7 @@ function validateRoute(request: Request, h: ResponseToolkit, options: Terminator
     contentLength: number,
     optionName: LimitOptionName,
     routeOptions: TerminatorRouteOptions,
-    throwError: (option: number) => never,
+    response: (option: number) => ResponseObject,
   ) => {
     const option = options?.[optionName];
     const limit = routeOptions?.[PACKAGE_NAME]?.limit ?? option;
@@ -100,12 +105,17 @@ function validateRoute(request: Request, h: ResponseToolkit, options: Terminator
       return h.continue;
     }
 
-    if (contentLength > limit) {
-      request.raw.req.socket?.destroy();
-      throwError(limit);
+    if (contentLength <= limit) {
+      return h.continue;
     }
 
-    return h.continue;
+    const result = response(limit).takeover();
+
+    request.raw.res.once('finish', () => {
+      request.raw.req.socket.end();
+    });
+
+    return result;
   };
 }
 
